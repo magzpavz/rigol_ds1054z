@@ -3,7 +3,9 @@ import datetime
 import time
 import re
 import csv
-from math import floor, log10
+import numpy as np
+import warnings
+# from math import floor, log10
 
 class rigol_ds1054z:
 	
@@ -82,8 +84,8 @@ class rigol_ds1054z:
 		if x == 0: return 0,0
 		Neg = x < 0
 		if Neg: x = -x
-		a = 1.0 * x / 10**(floor(log10(x)))
-		b = int(floor(log10(x)))
+		a = 1.0 * x / 10**(np.floor(np.log10(x)))
+		b = int(np.floor(np.log10(x)))
 		if Neg: a = -a
 		return a,b
 	
@@ -223,7 +225,19 @@ class rigol_ds1054z:
 		self.oscilloscope.write(':ACQ:MDEP ' + str(int(memory_depth)))
 		print "Acquire memory depth set to %d samples" % memory_depth
 
-	def write_waveform_data(self, channel=1, filename=''):
+	def get_waveform_data(self, channel=1, timeout=5):
+		# first wait for stop
+		starttime = time.time()
+		stopped = False
+		while (time.time()-starttime<timeout) and (stopped is not True):
+			self.oscilloscope.write(':trig:stat?')
+			fullreading = self.oscilloscope.read_raw()
+			stopped = (fullreading==b'STOP\n')
+			sleep(0.5)
+		if stopped is not True:
+			warnings.warn('Oscilloscope is not stopped')
+			return
+		# setup waveaform read
 		self.oscilloscope.write(':WAV:SOUR: CHAN' + str(channel))
 		time.sleep(1)
 		self.oscilloscope.write(':WAV:MODE NORM')
@@ -231,20 +245,32 @@ class rigol_ds1054z:
 		self.oscilloscope.write(':ACQ:MDEP?')
 		fullreading = self.oscilloscope.read_raw()
 		readinglines = fullreading.splitlines()
-		mdepth = int(readinglines[0])
-		num_reads = (mdepth / 15625) +1
-		if (filename == ''):
-			filename = "rigol_waveform_data_channel_" + str(channel) + "_" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") +".csv"
-		fid = open(filename, 'wb')
-		print ("Started saving waveform data for channel " + str(channel) + " " + str(mdepth) + " samples to filename " + '\"' + filename + '\"')
-		for read_loop in range(0,num_reads):
-			self.oscilloscope.write(':WAV:DATA?')
-			fullreading = self.oscilloscope.read_raw()
-			readinglines = fullreading.splitlines()
-			reading = str(readinglines[0])
-			reading = reading.replace(",", "\n")
-			fid.write(reading)
-		fid.close()
+		try: 
+			mdepth = int(readinglines[0])
+		except ValueError:
+			# Memory Depth = Sample Rate × Waveform Length
+			osc.oscilloscope.write(':ACQ:SRAT?')
+			samplerate = int(float(osc.oscilloscope.read_raw())) # returns string in engineering notation
+			osc.oscilloscope.write(':TIM:SCAL?')
+			waveformlen = 12*int(float(osc.oscilloscope.read_raw()))
+			mdepth = samplerate*waveformlen
+		n_per_read = 15625 # 15625 = 250k/16 = max number of points per read op
+		num_reads = -(-mdepth//n_per_read) # double negative makes it round up instead of down
+		datlist = []
+		# start read op
+		for read_loop in range(num_reads):
+			startpt = read_loop*n_per_read
+			stoppt = startpt+n_per_read-1
+			self.oscilloscope.write(f':wav:star {startpt}')
+			self.oscilloscope.write(f':wav:stop {stoppt}')
+			self.oscilloscope.write(':wav:data?')
+			datbytes = self.oscilloscope.read_raw()
+			datstr = datbytes.decode('ascii')
+			newdat = [float(pt) for pt in datstr[11:-1].split(',')]
+			# trim header and trailing newline
+			datlist.append(newdat)
+		dat = np.hstack(datlist)
+		return dat
 
 	def write_scope_settings_to_file(self, filename=''):
 		self.oscilloscope.write(':SYST:SET?')
