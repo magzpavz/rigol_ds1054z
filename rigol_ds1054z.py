@@ -207,15 +207,15 @@ class rigol_ds1054z:
 
 	def single_trigger(self):
 		self.oscilloscope.write(':SING')
-		time.sleep(3)
+		# time.sleep(3)
 		
 	def force_trigger(self):
 		self.oscilloscope.write(':TFOR')
-		time.sleep(3)
+		# time.sleep(3)
 		
 	def run_trigger(self):
 		self.oscilloscope.write(':RUN')
-		time.sleep(3)
+		# time.sleep(3)
 		
 	# only allowed values are 6e3, 6e4, 6e5, 6e6, 12e6 for single channels
 	# only allowed values are 6e3, 6e4, 6e5, 6e6, 12e6 for   dual channels
@@ -233,7 +233,7 @@ class rigol_ds1054z:
 			self.oscilloscope.write(':trig:stat?')
 			fullreading = self.oscilloscope.read_raw()
 			stopped = (fullreading==b'STOP\n')
-			sleep(0.5)
+			time.sleep(0.5)
 		if stopped is not True:
 			warnings.warn('Oscilloscope is not stopped')
 			return
