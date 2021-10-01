@@ -241,7 +241,7 @@ class rigol_ds1054z:
 		self.oscilloscope.write(':WAV:SOUR: CHAN' + str(channel))
 		time.sleep(1)
 		self.oscilloscope.write(':WAV:MODE NORM')
-		self.oscilloscope.write(':WAV:FORM ASC')
+		self.oscilloscope.write(':WAV:FORM BYTE')
 		self.oscilloscope.write(':ACQ:MDEP?')
 		fullreading = self.oscilloscope.read_raw()
 		readinglines = fullreading.splitlines()
@@ -254,7 +254,7 @@ class rigol_ds1054z:
 			self.oscilloscope.write(':TIM:SCAL?')
 			waveformlen = 12*int(float(self.oscilloscope.read_raw()))
 			mdepth = samplerate*waveformlen
-		n_per_read = 15625 # 15625 = 250k/16 = max number of points per read op
+		n_per_read = 250000 # 
 		num_reads = -(-mdepth//n_per_read) # double negative makes it round up instead of down
 		datlist = []
 		# start read op
@@ -265,11 +265,19 @@ class rigol_ds1054z:
 			self.oscilloscope.write(f':wav:stop {stoppt}')
 			self.oscilloscope.write(':wav:data?')
 			datbytes = self.oscilloscope.read_raw()
-			datstr = datbytes.decode('ascii')
-			newdat = [float(pt) for pt in datstr[11:-1].split(',')]
-			# trim header and trailing newline
+			newdat = [b for b in datbytes[11:-1]] # trim header and trailing newline
 			datlist.append(newdat)
-		dat = np.hstack(datlist)
+		dat_raw = np.hstack(datlist) # integer data
+		
+		# numbers to turn bytes into data
+		self.oscilloscope.write(":wav:yinc?")
+		y_increment = float(self.oscilloscope.read_raw())
+		self.oscilloscope.write(":wav:yor?")
+		y_origin = int(self.oscilloscope.read_raw())
+		self.oscilloscope.write(":wav:yref?")
+		y_ref = int(self.oscilloscope.read_raw())
+
+		dat = (dat_raw - y_origin - y_ref)*y_increment
 		return dat
 
 	def write_scope_settings_to_file(self, filename=''):
