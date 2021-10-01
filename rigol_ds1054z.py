@@ -11,10 +11,10 @@ class rigol_ds1054z:
 	
 	# Constructor
 	def __init__(self, debug=False):
-		resources = visa.ResourceManager('@py')
+		rm = visa.ResourceManager()
 		# insert your device here
-		# resources.list_resources() will show you the USB resource to put below
-		self.oscilloscope = resources.open_resource('USB0::6833::1230::DS1ZA192107675::0::INSTR')
+		# rm.list_resources() will show you the USB resource to put below
+		self.oscilloscope = rm.open_resource('USB0::0x1AB1::0x04CE::DS1ZA201707600::INSTR')
 		self.debug = debug
 
 	def print_info(self):
@@ -127,16 +127,16 @@ class rigol_ds1054z:
 		fid = open(filename, 'wb')
 		fid.write(raw_data)
 		fid.close()
-		print ("Wrote screen capture to filename " + '\"' + filename + '\"')
+		print("Wrote screen capture to filename " + '\"' + filename + '\"')
 		time.sleep(5)
 		
 	def close(self):
 		self.oscilloscope.close()
-		print "Closed USB session to oscilloscope"
+		print("Closed USB session to oscilloscope")
 		
 	def reset(self):
 		self.oscilloscope.write('*RST')
-		print "Reset oscilloscope"
+		print("Reset oscilloscope")
 		time.sleep(8)
 		
 	# probe should either be 10.0 or 1.0, per the setting on the physical probe
@@ -223,13 +223,13 @@ class rigol_ds1054z:
 	# the int conversion is needed for scientific notation values
 	def setup_mem_depth(self, memory_depth=12e6):
 		self.oscilloscope.write(':ACQ:MDEP ' + str(int(memory_depth)))
-		print "Acquire memory depth set to %d samples" % memory_depth
+		print("Acquire memory depth set to %d samples" % memory_depth)
 
 	def get_waveform_data(self, channel=1, timeout=5):
 		# first wait for stop
 		starttime = time.time()
 		stopped = False
-		while (time.time()-starttime<timeout) and (stopped is not True):
+		while ((time.time()-starttime)<timeout) and (stopped is not True):
 			self.oscilloscope.write(':trig:stat?')
 			fullreading = self.oscilloscope.read_raw()
 			stopped = (fullreading==b'STOP\n')
@@ -249,10 +249,10 @@ class rigol_ds1054z:
 			mdepth = int(readinglines[0])
 		except ValueError:
 			# Memory Depth = Sample Rate × Waveform Length
-			osc.oscilloscope.write(':ACQ:SRAT?')
-			samplerate = int(float(osc.oscilloscope.read_raw())) # returns string in engineering notation
-			osc.oscilloscope.write(':TIM:SCAL?')
-			waveformlen = 12*int(float(osc.oscilloscope.read_raw()))
+			self.oscilloscope.write(':ACQ:SRAT?')
+			samplerate = int(float(self.oscilloscope.read_raw())) # returns string in engineering notation
+			self.oscilloscope.write(':TIM:SCAL?')
+			waveformlen = 12*int(float(self.oscilloscope.read_raw()))
 			mdepth = samplerate*waveformlen
 		n_per_read = 15625 # 15625 = 250k/16 = max number of points per read op
 		num_reads = -(-mdepth//n_per_read) # double negative makes it round up instead of down
@@ -281,12 +281,12 @@ class rigol_ds1054z:
 		fid = open(filename, 'wb')
 		fid.write(raw_data)
 		fid.close()
-		print ("Wrote oscilloscope settings to filename " + '\"' + filename + '\"')
+		print("Wrote oscilloscope settings to filename " + '\"' + filename + '\"')
 		time.sleep(5)
 		
 	def restore_scope_settings_from_file(self, filename=''):
 		if (filename == ''):
-			print "ERROR: must specify filename\n"
+			print("ERROR: must specify filename\n")
 		else:
 			with open(filename, mode='rb') as file: # b is important -> binary
 				fileContent = file.read()
@@ -297,5 +297,5 @@ class rigol_ds1054z:
 				for x in range(0,len(fileContent)-1):
 					valList.append(ord(fileContent[x]))
 				self.oscilloscope.write_binary_values(':SYST:SET ', valList, datatype='B', is_big_endian=True) 
-			print ("Wrote oscilloscope settings to scope")
+			print("Wrote oscilloscope settings to scope")
 			time.sleep(8)
